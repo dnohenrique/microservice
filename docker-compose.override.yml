@@ -1,0 +1,15 @@
+version: '3.5'
+
+services:
+  microservice-empresas:
+    ports:
+      - "32304:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+  mongo:
+    ports:
+      - "27018:27017"
+  mongo-express:
+    image: mongo-express
+    ports:
+      - "8081"

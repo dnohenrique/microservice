@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Api</name>
+    </assembly>
+    <members>
+        <member name="M:Api.Controllers.EmpresaController.Post(Application.ViewModels.EmpresaPostViewModel)">
+             <summary>
+             Cria uma Empresa
+             </summary>
+             <param name="empresaPostViewModel">Dados necessários para criar uma empresa</param>
+             <response code="200">Se for possível criar a Empresa com sucesso</response>
+             <response code="400">Se acontecer algum problema de regra de negócio</response>          
+             <response code="500">Se acontecer algum problema inesperado</response>    
+        </member>
+        <member name="M:Api.Controllers.EmpresaController.Put(System.Guid,Application.ViewModels.EmpresaPutViewModel)">
+            <summary>
+            Atualiza um usuário específico.
+            </summary>
+            <param name="id"></param>
+            <param name="empresaPutViewModel"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Api.Controllers.EmpresaController.Get(System.Guid)">
+             <summary>
+             Pesquisa de Empresas
+             </summary>
+             <param name="id">Id do Empresa</param>
+             <returns></returns>
+             <response code="200">Pesquisa realizada com Sucesso</response>
+             <response code="400">Se acontecer algum problema de regra de negócio</response>          
+             <response code="500">Se acontecer algum problema inesperado</response>    
+        </member>
+        <member name="M:Api.Controllers.EmpresaController.Get(Application.ViewModels.EmpresaParametersViewModel)">
+             <summary>
+             Pesquisa de Empresas
+             </summary>
+             <param name="parameters">Parametros de Consulta</param>       
+             <returns></returns>
+             <response code="200">Pesquisa realizada com Sucesso</response>
+             <response code="400">Se acontecer algum problema de regra de negócio</response>          
+             <response code="500">Se acontecer algum problema inesperado</response>    
+        </member>
+        <member name="M:Api.Controllers.EmpresaController.Get(System.Guid,System.String)">
+            <summary>
+            Realizar Geração do Token pelo Id do Empresa
+            </summary>
+            <remarks>
+            Request de Exemplo:
+            
+                Empresa/d127b728-f84b-4dc1-926a-924cd402e49e/senha
+                
+            
+            </remarks>
+            <param name="id">Id do Empresa a ser Pesquisado</param>      
+            <response code="200">Pesquisa realizada com Sucesso</response>
+            <response code="400">Se acontecer algum problema de regra de negócio</response>          
+            <response code="500">Se acontecer algum problema inesperado</response>      
+            <returns></returns>        
+        </member>
+        <member name="M:Api.Controllers.EmpresaController.Put(System.Guid,Application.ViewModels.EmpresaPutAlterarSenhaViewModel)">
+            <summary>
+            Atualizar Senha do Empresa ( Exige Token Valido ) 
+            </summary>
+            <param name="id"></param>
+            <param name="empresaPutAlterarSenhaViewModel"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Api.Controllers.EmpresaController.ValidaToken">
+            <summary>
+            Valida Token do Empresa ( Exige Token Valido ) 
+            </summary>
+            <returns></returns>
+        </member>
+    </members>
+</doc>

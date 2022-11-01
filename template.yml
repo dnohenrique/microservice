@@ -1,0 +1,216 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  Environment:
+    Type: String
+  Repo:
+    Type: String
+  Tag:
+    Type: String
+  Owner:
+    Type: String
+Mappings:
+  ConfigMap:
+    staging:
+      EnvironmentName: Staging
+    production:
+      EnvironmentName: Production
+Resources:
+  GestaoClienteVindiTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Ref AWS::StackName
+      - Key: Owner
+        Value: !Ref Owner
+      - Key: Environment
+        Value: !Ref Environment
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: !Ref AWS::StackName
+      RetentionInDays: 7
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref AWS::StackName
+      ExecutionRoleArn: !Ref TaskExecutionRole
+      TaskRoleArn: !Ref TaskRole
+      ContainerDefinitions:
+      - Name: api
+        Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${Repo}:${Tag}'
+        Cpu: 32
+        Memory: 512
+        MemoryReservation: 64
+        PortMappings:
+        - ContainerPort: 80
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group: !Ref LogGroup
+            awslogs-region: !Ref AWS::Region
+        Environment:
+        - Name: ASPNETCORE_ENVIRONMENT
+          Value: !FindInMap
+          - ConfigMap
+          - !Ref Environment
+          - EnvironmentName
+        - Name: SnsConfiguration__ArnTopico
+          Value: !Ref GestaoClienteVindiTopic
+        Secrets:
+        - Name: MongoDbConfiguration__ConnectionString
+          ValueFrom: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/platform-mongodb-${Environment}-service-uri'
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: ListenerRule
+    Properties:
+      ServiceName: !Ref AWS::StackName
+      Cluster: !Sub 'platform-${Owner}'
+      DesiredCount: 1
+      Role: !Ref ServiceRole
+      TaskDefinition: !Ref TaskDefinition
+      LoadBalancers:
+      - ContainerName: api
+        ContainerPort: 80
+        TargetGroupArn: !Ref TargetGroup
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !ImportValue platform-vpc
+      Port: 80
+      Protocol: HTTP
+      Matcher:
+        HttpCode: 200-299
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /health
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Tags:
+      - Key: Name
+        Value: !Ref AWS::StackName
+      - Key: Owner
+        Value: !Ref Owner
+      - Key: Environment
+        Value: !Ref Environment
+  AllocateAlbPriority:
+    Type: Custom::AllocateAlbPriority
+    Properties:
+      ServiceToken: !ImportValue platform-custom-resources-allocate-alb-priority-arn
+      ListenerArn:
+        Fn::ImportValue: !Sub platform-${Owner}-private-alb-http-listener
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn:
+        Fn::ImportValue: !Sub platform-${Owner}-private-alb-http-listener
+      Priority: !GetAtt AllocateAlbPriority.Priority
+      Conditions:
+      - Field: host-header
+        Values:
+        - !Sub '${AWS::StackName}.platform.ferias.in'
+      Actions:
+      - TargetGroupArn: !Ref TargetGroup
+        Type: forward
+  PrivateDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue platform-private-hosted-zone
+      Name: !Sub '${AWS::StackName}.platform.ferias.in'
+      ResourceRecords:
+      - Fn::ImportValue: !Sub 'platform-${Owner}-private-alb-dnsname'
+      TTL: 300
+      Type: CNAME
+  ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-service'
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 
+            - 'ecs.amazonaws.com'
+          Action:
+          - 'sts:AssumeRole'
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-service'
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ec2:AuthorizeSecurityGroupIngress'
+            - 'ec2:Describe*'
+            - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+            - 'elasticloadbalancing:Describe*'
+            - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+            - 'elasticloadbalancing:DeregisterTargets'
+            - 'elasticloadbalancing:DescribeTargetGroups'
+            - 'elasticloadbalancing:DescribeTargetHealth'
+            - 'elasticloadbalancing:RegisterTargets'
+            Resource: '*'
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-task-execution'
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 
+            - 'ecs-tasks.amazonaws.com'
+          Action:
+          - 'sts:AssumeRole'
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-task-execution'
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'ecr:GetAuthorizationToken'
+            - 'ecr:BatchCheckLayerAvailability'
+            - 'ecr:GetDownloadUrlForLayer'
+            - 'ecr:BatchGetImage'
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - 'ssm:GetParameters'
+            Resource:
+            - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/platform-mongodb-${Environment}-service-uri'
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-task-role'
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 
+            - 'ecs-tasks.amazonaws.com'
+          Action:
+          - 'sts:AssumeRole'
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-task-role'
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'sns:Publish'
+            Resource:
+            - !Ref GestaoClienteVindiTopic
+Outputs:
+  GestaoClienteVindiTopic:
+    Value: !Ref GestaoClienteVindiTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-gestao-cliente-vindi-topic'

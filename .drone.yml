@@ -1,0 +1,81 @@
+---
+kind: pipeline
+type: docker
+name: Pull request
+
+trigger:
+  event:
+  - pull_request
+
+steps:
+- name: Validate CloudFormation template
+  image: robertstettner/drone-cloudformation
+  settings:
+    mode: validate
+    template: template.yml
+
+---
+kind: pipeline
+type: docker
+name: Integration
+
+trigger:
+  branch:
+  - master
+  event:
+  - push
+
+volumes:
+- name: dockersock
+  host:
+    path: /var/run/docker.sock
+
+steps:
+
+- name: Build and push Docker image
+  image: diegoaltx/drone-ecr-build-push:v1.0.0-rc.4
+  volumes:
+  - name: dockersock
+    path: /var/run/docker.sock
+  settings:
+    repo: ${DRONE_REPO_NAME}
+    region:
+    - us-east-1
+    tags:
+    - latest
+    - commit-${DRONE_COMMIT:0:7}
+
+---
+kind: pipeline
+type: docker
+name: Deployment
+
+trigger:
+  target:
+  - staging
+  - production
+  event:
+  - promote
+
+steps:
+- name: Promote Docker image
+  image: diegoaltx/drone-ecr-retag:v1.0.0-rc.3
+  settings:
+    region:
+    - us-east-1
+    tags:
+    - ${DRONE_DEPLOY_TO}
+    repo: ${DRONE_REPO_NAME}
+    
+- name: Deploy CloudFormation template
+  image: diegoaltx/drone-cloudformation:v0.1.0-rc.1
+  settings:
+    mode: createOrUpdate
+    template: template.yml
+    region: us-east-1
+    stackname: ${DRONE_REPO_NAME}-${DRONE_DEPLOY_TO}
+    params:
+      Repo: ${DRONE_REPO_NAME}
+      Tag: commit-${DRONE_COMMIT:0:7}
+      Environment: ${DRONE_DEPLOY_TO}
+      Owner: portal

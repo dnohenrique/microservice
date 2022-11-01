@@ -1,0 +1,110 @@
+kind: pipeline
+type: docker
+name: default
+
+trigger:
+  ref:
+    - refs/heads/develop
+    - refs/heads/hotfix/*
+    - refs/heads/release/*
+    - refs/heads/master
+
+steps:
+  - name: publish_dev
+    when:
+      ref:
+        - refs/heads/develop
+    image: plugins/ecr
+    settings:
+      access_key:
+        from_secret: aws_access_key
+      secret_key:
+        from_secret: aws_access_secret
+      region: us-east-1
+      repo: 957296915963.dkr.ecr.us-east-1.amazonaws.com/empresa-service
+      registry: 957296915963.dkr.ecr.us-east-1.amazonaws.com
+      dockerfile: devops/Dockerfile
+      tags:
+        - dev
+        - build-${DRONE_BUILD_NUMBER}
+
+  - name: publish_hml
+    when:
+      ref:
+        - refs/heads/hotfix/*
+        - refs/heads/release/*
+    image: plugins/ecr
+    settings:
+      access_key:
+        from_secret: aws_access_key
+      secret_key:
+        from_secret: aws_access_secret
+      region: us-east-1
+      repo: 957296915963.dkr.ecr.us-east-1.amazonaws.com/empresa-service
+      registry: 957296915963.dkr.ecr.us-east-1.amazonaws.com
+      dockerfile: devops/Dockerfile
+      tags:
+        - hml
+        - ${DRONE_BRANCH##*/}
+        - build-${DRONE_BUILD_NUMBER}
+
+  - name: publish_prd
+    when:
+      ref:
+        - refs/heads/master
+    image: plugins/ecr
+    settings:
+      access_key:
+        from_secret: aws_access_key
+      secret_key:
+        from_secret: aws_access_secret
+      region: sa-east-1
+      repo: 957296915963.dkr.ecr.sa-east-1.amazonaws.com/empresa-service
+      registry: 957296915963.dkr.ecr.sa-east-1.amazonaws.com
+      dockerfile: devops/Dockerfile
+      tags:
+        - prd
+        - build-${DRONE_BUILD_NUMBER}
+
+  - name: deploy_dev
+    when:
+      ref:
+        - refs/heads/develop
+    image: diegoteixeir4/awscli
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_access_secret
+      AWS_DEFAULT_REGION: us-east-1
+    commands:
+      - aws ecs update-service --cluster fc-cluster-dev-services --service dev-empresa-service --force-new-deployment
+
+  - name: deploy_hml
+    when:
+      ref:
+        - refs/heads/hotfix/*
+        - refs/heads/release/*
+    image: diegoteixeir4/awscli
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_access_secret
+      AWS_DEFAULT_REGION: us-east-1
+    commands:
+      - aws ecs update-service --cluster fc-cluster-hml-services --service hml-empresa-service --force-new-deployment
+
+  - name: deploy_prd
+    when:
+      ref:
+        - refs/heads/master
+    image: diegoteixeir4/awscli
+    environment:
+      AWS_ACCESS_KEY_ID:
+        from_secret: aws_access_key
+      AWS_SECRET_ACCESS_KEY:
+        from_secret: aws_access_secret
+      AWS_DEFAULT_REGION: sa-east-1
+    commands:
+      - aws ecs update-service --cluster fc-cluster-prd-services --service prd-empresa-service --force-new-deployment
